@@ -1,0 +1,9 @@
+//on doit installer sass : npm instal -D sass (-D pour qu il s ajoute dans devDependencies tt seul car quand le site sera en ligne on va besoin du sass)
+$theme-colors: (
+    'primary': #0050C8,
+    'danger': #EA2D67,
+    'info' : #63BAAA
+);
+
+@import 'bootstrap/scss/bootstrap'; 
+
