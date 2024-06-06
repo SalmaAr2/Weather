@@ -1,5 +1,5 @@
 import styles from './SearchBar.module.scss'
-import {Autocomplete, Button, TextField} from "@mui/material";
+import {Autocomplete, Button, TextField, CircularProgress} from "@mui/material";
 import {useEffect, useState} from "react";
 import {useDispatch} from "react-redux";
 import {resetData, setData} from "../../features/weather/WeatherSlice";
@@ -15,6 +15,9 @@ export const SearchBar = () => {
     const [unity] = useState('metric')//unité
     const [geoLocation, setGeoLocation] = useState(undefined)
     const [isCurrentLocation, setIsCurrentLocation] = useState(false)
+    const [loading, setLoading] = useState(false); // Indicateur de chargement
+    const [error, setError] = useState(null); // État pour les erreurs
+
     const getGeoLocation = () => {
         navigator.geolocation.getCurrentPosition((position) => {
             setIsCurrentLocation(true)
@@ -22,34 +25,66 @@ export const SearchBar = () => {
                 lon: position.coords.longitude,
                 lat: position.coords.latitude,
             })
+        }, (error) => {
+            setError('Impossible d\'obtenir la géolocalisation. Veuillez vérifier les permissions.');
         })
     }
+
     useEffect(() => {
         getGeoLocation()
     }, []);
+
     useEffect(() => {
         getData()
     }, [geoLocation]);
 
     const handleInputChange = (e) => { //quand j ecris sur search si j ecris C ca donne casablanca
         const {value} = e.currentTarget
-        fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${value}&type=city&format=json&apiKey=${GEO_API_KEY}`)
-            .then(response => response.json())
-            .then(json => setCities(json.results?.map(data => {
-                const {lat, lon, city, country, formatted} = data
-                return {lat, lon, city, country, formatted}
-            })))
+        if (value.length > 0) { // Valider que le champ de recherche n'est pas vide
+            setLoading(true);
+            fetch(`https://api.geoapify.com/v1/geocode/autocomplete?text=${value}&type=city&format=json&apiKey=${GEO_API_KEY}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erreur lors de la récupération des données géographiques.');
+                    }
+                    return response.json();
+                })
+                .then(json => setCities(json.results?.map(data => {
+                    const {lat, lon, city, country, formatted} = data
+                    return {lat, lon, city, country, formatted}
+                })))
+                .catch(error => {
+                    setError(error.message);
+                })
+                .finally(() => {
+                    setLoading(false);
+                });
+        }
     }
+
     const getData = () => {
         if (geoLocation) {
+            setLoading(true);
             fetch(`https://api.openweathermap.org/data/2.5/weather?lat=${geoLocation.lat}&units=${unity}&lon=${geoLocation.lon}&appid=${WEATHER_API_KEY}`)
-                .then(response => response.json())
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Erreur lors de la récupération des données météorologiques.');
+                    }
+                    return response.json();
+                })
                 .then(json => {
                     const {clouds, main, name, sys, weather, wind} = json
                     dispatch(setData({clouds, main, name, sys, weather, wind}))
                 })
+                .catch(error => {
+                    setError(error.message);
+                })
+                .finally(() => {
+                    setLoading(false);
+                });
         }
     }
+
     const handleAutocompleteSelect = (e, value) => {
         if (value !== null) { //si on click sur x(close)
             const {lon, lat} = value
@@ -62,23 +97,25 @@ export const SearchBar = () => {
         } else {
             dispatch(resetData())
         }
-
     }
+
     return (
         <>
-            <div
-                className={styles.searchContainer}>
+            <div className={styles.searchContainer}>
+                {error && <div className={styles.error}>{error}</div>}
                 <Autocomplete className={styles.searchInput}
                               clearOnBlur={false}
                               onChange={handleAutocompleteSelect}
                               getOptionLabel={(option) => option.formatted}
                               renderInput={(params) =>
                                   <TextField onChange={handleInputChange} {...params}
-                                             label={'Enter your city ...'}/>}
+                                             label={'Enter your city ...'}
+                                             disabled={loading}/>}
                               options={cities || []}/>
-
-                <Button disabled={geoLocation === undefined || isCurrentLocation === true} variant="contained"
-                        onClick={() => getGeoLocation()}><PositionSvg color={'#fff'}/></Button>
+                <Button disabled={geoLocation === undefined || isCurrentLocation === true || loading} variant="contained"
+                        onClick={() => getGeoLocation()}>
+                    {loading ? <CircularProgress size={24} color="inherit"/> : <PositionSvg color={'#fff'}/>}
+                </Button>
             </div>
         </>
     )
